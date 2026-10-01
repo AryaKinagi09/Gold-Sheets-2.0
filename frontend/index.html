@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Gold Sheets</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <main class="page">
+    <header class="hero">
+      <p class="eyebrow">Gold Sheets 2.0</p>
+      <h1>Generate a sheet</h1>
+      <p class="lede">Choose a builder/Region(s)</p>
+    </header>
+
+    <section class="card">
+      <label for="builder-search">Builder</label>
+      <div class="combo" id="builder-combo">
+        <input
+          id="builder-search"
+          type="text"
+          placeholder="Select a builder"
+          autocomplete="off"
+          role="combobox"
+          aria-expanded="false"
+          aria-controls="builder-options"
+        />
+        <span class="chevron" aria-hidden="true"></span>
+        <ul id="builder-options" class="combo-menu" role="listbox" hidden></ul>
+      </div>
+      <p id="builder-note" class="note"></p>
+    </section>
+
+    <section class="card">
+      <div class="row">
+        <h2>Regions</h2>
+        <label class="check">
+          <input id="select-all" type="checkbox" />
+          Select all
+        </label>
+      </div>
+      <div id="regions" class="regions">
+        <p class="muted">Select a builder to see regions.</p>
+      </div>
+    </section>
+
+    <div class="actions">
+      <button id="generate" type="button" disabled>Generate PDF</button>
+      <p id="status" class="status"></p>
+    </div>
+  </main>
+  <script src="/app.js"></script>
+</body>
+</html>

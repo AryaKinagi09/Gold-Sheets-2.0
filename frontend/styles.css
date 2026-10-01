@@ -1,0 +1,153 @@
+:root {
+  --bg: #f4f1ea;
+  --ink: #1c1915;
+  --muted: #6b645b;
+  --card: #fffdf8;
+  --line: #e4ddd2;
+  --gold: #9a6b2f;
+  --gold-dark: #7a5220;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: "Segoe UI", sans-serif;
+  color: var(--ink);
+  background:
+    radial-gradient(circle at top left, #f8efe0, transparent 40%),
+    var(--bg);
+}
+
+.page {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 48px 20px 64px;
+}
+
+.eyebrow {
+  margin: 0 0 8px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-size: 22px;
+  font-weight: 650;
+  color: var(--gold);
+}
+
+h1 { margin: 0; font-size: 40px; font-weight: 600; }
+h2 { margin: 0; font-size: 18px; }
+.lede { color: var(--muted); }
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 20px;
+  margin-top: 16px;
+  box-shadow: 0 10px 30px rgba(60, 40, 10, 0.04);
+}
+
+label { display: block; font-weight: 600; margin-bottom: 8px; }
+
+.combo {
+  position: relative;
+}
+
+.combo input {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px 36px 10px 12px;
+  font: inherit;
+  background: white;
+}
+
+.chevron {
+  position: absolute;
+  right: 14px;
+  top: 50%;
+  width: 8px;
+  height: 8px;
+  border-right: 2px solid var(--muted);
+  border-bottom: 2px solid var(--muted);
+  transform: translateY(-70%) rotate(45deg);
+  pointer-events: none;
+}
+
+.combo-menu {
+  position: absolute;
+  z-index: 20;
+  left: 0;
+  right: 0;
+  top: calc(100% + 6px);
+  max-height: 240px;
+  overflow: auto;
+  margin: 0;
+  padding: 6px;
+  list-style: none;
+  background: white;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: 0 12px 28px rgba(60, 40, 10, 0.12);
+}
+
+.combo-menu button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  color: var(--ink);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-weight: 500;
+}
+
+.combo-menu button:hover,
+.combo-menu button[aria-selected="true"] {
+  background: #f3eadb;
+}
+
+.row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.check { font-weight: 500; display: flex; gap: 8px; align-items: center; }
+
+.regions {
+  margin-top: 14px;
+  display: grid;
+  gap: 8px;
+  max-height: 280px;
+  overflow: auto;
+}
+
+.region {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: #faf7f2;
+}
+
+.note, .muted, .status { color: var(--muted); }
+.note { min-height: 1.2em; }
+
+.actions { margin-top: 20px; }
+
+button {
+  background: var(--gold);
+  color: white;
+  border: 0;
+  border-radius: 999px;
+  padding: 12px 22px;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+button:hover { background: var(--gold-dark); }
+button:disabled { opacity: 0.45; cursor: not-allowed; }

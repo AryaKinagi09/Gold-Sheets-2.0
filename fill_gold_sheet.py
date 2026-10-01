@@ -31,7 +31,7 @@ from typing import Any, Iterable, Optional
 
 from openpyxl import load_workbook
 from pypdf import PdfReader, PdfWriter
-from pypdf.generic import BooleanObject, NameObject, TextStringObject
+from pypdf.generic import BooleanObject, NameObject, NumberObject, TextStringObject
 
 
 # ---------------------------------------------------------------------------
@@ -1555,14 +1555,14 @@ def resolve_pdf_field_names(available: Iterable[str]) -> dict[str, str]:
     return resolved
 
 
-def _set_need_appearances(writer: PdfWriter) -> None:
+def _set_need_appearances(writer: PdfWriter, needed: bool = True) -> None:
     try:
         if writer._root_object.get("/AcroForm") is None:  # noqa: SLF001
             writer._root_object.update(  # noqa: SLF001
                 {NameObject("/AcroForm"): writer._create_object({})}  # noqa: SLF001
             )
         writer._root_object["/AcroForm"].update(  # noqa: SLF001
-            {NameObject("/NeedAppearances"): BooleanObject(True)}
+            {NameObject("/NeedAppearances"): BooleanObject(needed)}
         )
     except Exception:
         pass
@@ -1772,9 +1772,11 @@ def _text_fits_field(
 ) -> bool:
     """True when wrapped text fits vertically in the field (PDF wraps horizontally)."""
     line_count = _estimate_wrapped_lines(text, width, font_size)
-    line_h = font_size * 1.22
-    total_h = line_count * line_h + font_size * 0.15
-    return total_h <= height * 0.92
+    # Acrobat uses a taller line box than a tight estimate. Stay under that
+    # so it does not shrink only the longest field.
+    line_h = font_size * 1.45
+    total_h = line_count * line_h + font_size * 0.35
+    return total_h <= height * 0.78
 
 
 def auto_fit_font_size(
@@ -2001,6 +2003,10 @@ def apply_field_text_styles(
     if growth_sizes:
         growth_font = min(growth_sizes)
 
+    # Program Details and Growth Strategy share one body size.
+    body_sizes = [size for size in (program_font, growth_font) if size is not None]
+    body_font = min(body_sizes) if body_sizes else None
+
     applied: dict[str, str] = {}
     builder_name_font: Optional[float] = None
     for logical in logical_keys:
@@ -2016,10 +2022,10 @@ def apply_field_text_styles(
             builder_name_font = font_size
         elif logical in DIVISION_FIELDS and divisions_font is not None:
             font_size = divisions_font
-        elif logical in PROGRAM_DETAIL_FIELDS and program_font is not None:
-            font_size = program_font
-        elif logical in GROWTH_TEXT_FIELDS and growth_font is not None:
-            font_size = growth_font
+        elif logical in PROGRAM_DETAIL_FIELDS and body_font is not None:
+            font_size = body_font
+        elif logical in GROWTH_TEXT_FIELDS and body_font is not None:
+            font_size = body_font
         elif logical in AUTO_FIT_FIELDS:
             text = values.get(logical, "")
             width, height = _widget_size_for_field(writer, actual)
@@ -2044,10 +2050,8 @@ def apply_field_text_styles(
         print(f"  Divisions uniform font: {divisions_font}pt")
     if builder_name_font is not None:
         print(f"  Builder name font: {builder_name_font}pt")
-    if program_font is not None:
-        print(f"  Program Details uniform font: {program_font}pt")
-    if growth_font is not None:
-        print(f"  Growth Strategy uniform font: {growth_font}pt")
+    if body_font is not None:
+        print(f"  Body uniform font: {body_font}pt")
     print(
         f"Applied field styles: {len(applied)} PDF field(s) "
         f"(white header/labels: {len(WHITE_FIELD_DA) + len(GROWTH_STRAT_LABELS) + 1}, "
@@ -2107,6 +2111,89 @@ def apply_uniform_text_styles(writer: PdfWriter, field_names: list[str]) -> None
             widget[NameObject("/DA")] = da
 
 
+def _font_from_widget(writer: PdfWriter, field_name: str) -> tuple[str, float]:
+    """Font name and size already chosen for this field, e.g. ('/Helv', 10)."""
+    for widget in _iter_widgets_named(writer, field_name):
+        da = widget.get("/DA")
+        if not da:
+            parent = widget.get("/Parent")
+            if parent is not None:
+                try:
+                    da = parent.get_object().get("/DA")
+                except Exception:
+                    da = None
+        if not da:
+            continue
+        font_name, font_size = _parse_da(da)
+        if font_size <= 0:
+            font_size = float(UNIFORM_FIELD_SIZE)
+        return f"/{font_name}", font_size
+    return "/Helv", float(UNIFORM_FIELD_SIZE)
+
+
+_MULTILINE_LOGICALS = PROGRAM_DETAIL_FIELDS | GROWTH_TEXT_FIELDS | frozenset(DIVISION_FIELDS)
+_MULTILINE_FLAG = 4096
+
+
+def _drop_widget_appearances(writer: PdfWriter) -> None:
+    """Remove baked appearances so Acrobat wraps from /DA and /V.
+
+    A pre-wrapped appearance ends each line short of the box. Acrobat wraps
+    the real text to the field edge when it builds the appearance itself.
+    """
+    seen: set[int] = set()
+
+    def clear(obj: Any) -> None:
+        if obj is None:
+            return
+        field = obj.get_object() if hasattr(obj, "get_object") else obj
+        ident = id(field)
+        if ident in seen:
+            return
+        seen.add(ident)
+        if "/AP" in field:
+            del field[NameObject("/AP")]
+        for kid in field.get("/Kids") or []:
+            clear(kid)
+
+    acro = writer._root_object.get("/AcroForm")  # noqa: SLF001
+    if acro is not None:
+        for ref in acro.get_object().get("/Fields") or []:
+            clear(ref)
+    for page in writer.pages:
+        for annot in page.get("/Annots") or []:
+            clear(annot)
+
+
+def _write_acrobat_field(
+    writer: PdfWriter,
+    field_name: str,
+    value: str,
+    da: str,
+    *,
+    multiline: bool,
+) -> None:
+    """Put the value and font on both the widget and its parent.
+
+    Acrobat paints /AP on open and switches to /V when the box is clicked.
+    Those two have to carry the same text, or a field looks blank until clicked.
+    """
+    for widget in _iter_widgets_named(writer, field_name):
+        targets = [widget]
+        parent = widget.get("/Parent")
+        if parent is not None:
+            try:
+                targets.append(parent.get_object())
+            except Exception:
+                pass
+        for target in targets:
+            target[NameObject("/V")] = TextStringObject(value)
+            target[NameObject("/DA")] = TextStringObject(da)
+            if multiline:
+                flags = int(target.get("/Ff") or 0) | _MULTILINE_FLAG
+                target[NameObject("/Ff")] = NumberObject(flags)
+
+
 def fill_pdf(template: Path, field_values: dict[str, str], out_path: Path) -> dict[str, str]:
     reader = PdfReader(str(template))
     writer = PdfWriter()
@@ -2124,13 +2211,36 @@ def fill_pdf(template: Path, field_values: dict[str, str], out_path: Path) -> di
             continue
         pdf_update[actual] = "" if value is None else str(value)
 
-    if writer.get_fields() is not None:
-        for page in writer.pages:
-            writer.update_page_form_field_values(page, pdf_update)
-
+    # One explicit size per body section. Font size 0 makes Acrobat auto-size
+    # each box, so a short line draws larger than a long one.
     apply_field_text_styles(writer, resolved, field_values.keys(), field_values)
 
-    _set_need_appearances(writer)
+    logical_by_actual = {actual: logical for logical, actual in resolved.items()}
+    plain_update: dict[str, str] = {}
+    for actual, value in pdf_update.items():
+        _font_name, font_size = _font_from_widget(writer, actual)
+        logical = logical_by_actual.get(actual, "")
+        da = da_for_logical(logical, font_size) if logical else f"/Helv {font_size:g} Tf 0 g"
+        _write_acrobat_field(
+            writer,
+            actual,
+            value,
+            da,
+            multiline=logical in _MULTILINE_LOGICALS,
+        )
+        plain_update[actual] = value
+
+    if writer.get_fields() is not None and plain_update:
+        for page in writer.pages:
+            writer.update_page_form_field_values(
+                page,
+                plain_update,
+                auto_regenerate=None,
+            )
+
+    apply_field_text_styles(writer, resolved, field_values.keys(), field_values)
+    _drop_widget_appearances(writer)
+    _set_need_appearances(writer, needed=True)
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
     with open(out_path, "wb") as f:

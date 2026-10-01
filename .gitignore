@@ -20,3 +20,5 @@ shea_mapping.json
 Thumbs.db
 .vscode/
 .idea/
+
+outputs/

@@ -1,0 +1,35 @@
+services:
+  mongo:
+    image: mongo:7
+    container_name: goldsheets-mongo
+    ports:
+      - "27018:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: goldsheets
+      MONGO_INITDB_ROOT_PASSWORD: goldsheets_dev
+      MONGO_INITDB_DATABASE: gold_sheets
+    volumes:
+      - mongo_data:/data/db
+
+  api:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: goldsheets-api
+    ports:
+      - "8000:8000"
+    environment:
+      MONGO_URI: mongodb://goldsheets:goldsheets_dev@mongo:27017/?authSource=admin
+      MONGO_DB: gold_sheets
+      DATA_SOURCE: mongo
+      PDF_TEMPLATE: /data/template.pdf
+      OUTPUT_DIR: /data/outputs
+    volumes:
+      - "./Gold sheet 2.0 template -Internal Version .pdf:/data/template.pdf:ro"
+      - "./outputs:/data/outputs"
+      - "./frontend:/app/frontend:ro"
+    depends_on:
+      - mongo
+
+volumes:
+  mongo_data:
