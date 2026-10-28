@@ -11,11 +11,26 @@
     <header class="hero">
       <p class="eyebrow">Gold Sheets 2.0</p>
       <h1>Generate a sheet</h1>
-      <p class="lede">Choose a builder/Region(s)</p>
+      <p class="lede">Choose Corporate or Divisions, then pick to generate.</p>
     </header>
 
     <section class="card">
-      <label for="builder-search">Builder</label>
+      <label>Sheet type</label>
+      <div class="mode-toggle" role="group" aria-label="Sheet type">
+        <button type="button" class="mode active" data-mode="corporate">
+          Corporate
+        </button>
+        <button type="button" class="mode" data-mode="division">
+          Divisions
+        </button>
+      </div>
+      <!-- <p id="mode-note" class="note">
+        
+      </p> -->
+    </section>
+
+    <section class="card" id="builder-card">
+      <label for="builder-search" id="builder-label">Builder</label>
       <div class="combo" id="builder-combo">
         <input
           id="builder-search"
@@ -32,17 +47,24 @@
       <p id="builder-note" class="note"></p>
     </section>
 
-    <section class="card">
+    <section class="card" id="divisions-card" hidden>
       <div class="row">
-        <h2>Regions</h2>
+        <h2>Divisions</h2>
         <label class="check">
           <input id="select-all" type="checkbox" />
           Select all
         </label>
       </div>
+      <input
+        id="division-search"
+        type="search"
+        placeholder="Search this builder's divisions"
+        autocomplete="off"
+      />
       <div id="regions" class="regions">
-        <p class="muted">Select a builder to see regions.</p>
+        <p class="muted">Select a builder to see its divisions.</p>
       </div>
+      <p id="division-note" class="note"></p>
     </section>
 
     <div class="actions">
@@ -50,6 +72,6 @@
       <p id="status" class="status"></p>
     </div>
   </main>
-  <script src="/app.js"></script>
+  <script src="/app.js?v=20261026"></script>
 </body>
 </html>

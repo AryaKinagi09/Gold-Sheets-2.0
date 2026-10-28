@@ -49,6 +49,31 @@ h2 { margin: 0; font-size: 18px; }
 
 label { display: block; font-weight: 600; margin-bottom: 8px; }
 
+.mode-toggle {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.mode-toggle .mode {
+  background: white;
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 10px 16px;
+  font-weight: 600;
+}
+
+.mode-toggle .mode:hover {
+  background: #f3eadb;
+}
+
+.mode-toggle .mode.active {
+  background: var(--gold);
+  border-color: var(--gold);
+  color: white;
+}
+
 .combo {
   position: relative;
 }
@@ -115,6 +140,16 @@ label { display: block; font-weight: 600; margin-bottom: 8px; }
 }
 
 .check { font-weight: 500; display: flex; gap: 8px; align-items: center; }
+
+#division-search {
+  width: 100%;
+  margin-top: 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px 12px;
+  font: inherit;
+  background: white;
+}
 
 .regions {
   margin-top: 14px;

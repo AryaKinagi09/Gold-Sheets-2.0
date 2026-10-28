@@ -2194,7 +2194,23 @@ def _write_acrobat_field(
                 target[NameObject("/Ff")] = NumberObject(flags)
 
 
-def fill_pdf(template: Path, field_values: dict[str, str], out_path: Path) -> dict[str, str]:
+def fill_pdf(
+    template: Path,
+    field_values: dict[str, str],
+    out_path: Path,
+    page_indices: Optional[list[int]] = None,
+) -> dict[str, str]:
+    """
+    Fill the template PDF.
+
+    Always fill the full 4-page template first (form fields break if pages are
+    sliced before writing values). Then keep only page_indices in the output.
+      Corporate Gold Sheet -> [0, 1]  (pages 1-2)
+      Division Gold Sheet  -> [2, 3]  (pages 3-4)
+      None keeps every page.
+    """
+    from io import BytesIO
+
     reader = PdfReader(str(template))
     writer = PdfWriter()
     writer.append(reader)
@@ -2232,19 +2248,43 @@ def fill_pdf(template: Path, field_values: dict[str, str], out_path: Path) -> di
 
     if writer.get_fields() is not None and plain_update:
         for page in writer.pages:
+            # Build visible appearances on every page before any trim.
             writer.update_page_form_field_values(
                 page,
                 plain_update,
-                auto_regenerate=None,
+                auto_regenerate=True,
             )
 
     apply_field_text_styles(writer, resolved, field_values.keys(), field_values)
-    _drop_widget_appearances(writer)
+
+    # When keeping the full PDF, drop baked APs and let Acrobat redraw from /DA.
+    # When trimming to corporate/division pages, KEEP appearances — otherwise
+    # Acrobat opens blank sheets (page extract breaks the AcroForm links).
+    if page_indices is None:
+        _drop_widget_appearances(writer)
     _set_need_appearances(writer, needed=True)
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(out_path, "wb") as f:
-        writer.write(f)
+
+    if page_indices is None:
+        with open(out_path, "wb") as f:
+            writer.write(f)
+    else:
+        for i in page_indices:
+            if i < 0 or i >= len(writer.pages):
+                raise ValueError(
+                    f"Template page index {i} out of range "
+                    f"(template has {len(writer.pages)} page(s))"
+                )
+        buf = BytesIO()
+        writer.write(buf)
+        buf.seek(0)
+        trimmed = PdfWriter()
+        # append(..., pages=...) keeps annotation/appearance streams with the page
+        trimmed.append(buf, pages=page_indices)
+        _set_need_appearances(trimmed, needed=True)
+        with open(out_path, "wb") as f:
+            trimmed.write(f)
 
     if unresolved:
         print("WARNING: PDF fields not found in template:")

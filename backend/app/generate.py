@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import re
+import zipfile
 from datetime import date
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from fill_gold_sheet import (
     SfxlRow,
@@ -19,6 +20,12 @@ from fill_gold_sheet import (
     normalize_display_casing,
     sfxl_get,
 )
+
+SheetType = Literal["corporate", "division"]
+
+# 0-based page indices in the 4-page Gold Sheet 2.0 template
+CORPORATE_PAGES = [0, 1]
+DIVISION_PAGES = [2, 3]
 
 
 def _mongo_docs_to_sfxl(
@@ -50,7 +57,18 @@ def _pick_corporate_row(
 def build_field_values_from_mongo(
     prior: dict[str, Any],
     sfxl_docs: list[dict[str, Any]],
+    *,
+    sheet_type: SheetType = "corporate",
+    division_label: str | None = None,
 ) -> dict[str, str]:
+    """
+    Build PDF field values.
+
+    Corporate: same national fields + all division names in Divisions_*.
+    Division: same header / national fields for now; division-only body
+    fields stay empty until that mapping exists. Divisions_* listing is
+    cleared so page 3-4 do not repeat the corporate division roster.
+    """
     fields = prior.get("fields") or {}
     builder_name = (
         fields.get("Account Name")
@@ -73,12 +91,18 @@ def build_field_values_from_mongo(
     while len(strategies) < 4:
         strategies.append("")
 
+    # Always compute the corporate division roster. Shared header fields on
+    # pages 3-4 use the same names; division-only body fields stay unmapped.
     div_buckets, total_d, _ = build_divisions_from_sfxl(
         rows, headers, colmap, builder_name, max_buckets=4
     )
 
+    display_name = builder_name
+    if sheet_type == "division" and division_label:
+        display_name = f"{builder_name} - {division_label}"
+
     return {
-        "Builder_Name": builder_name,
+        "Builder_Name": display_name,
         "Headquarters": sf("Physical State/Province"),
         "Website_URL": sf("Website"),
         "Market_Facing_Position": sf("Type"),
@@ -135,7 +159,56 @@ def generate_pdf(
     sfxl_docs: list[dict[str, Any]],
     template_path: Path,
     output_path: Path,
+    sheet_type: SheetType = "corporate",
+    division_label: str | None = None,
 ) -> dict[str, str]:
-    values = build_field_values_from_mongo(prior, sfxl_docs)
-    fill_pdf(template_path, values, output_path)
+    values = build_field_values_from_mongo(
+        prior,
+        sfxl_docs,
+        sheet_type=sheet_type,
+        division_label=division_label,
+    )
+    pages = CORPORATE_PAGES if sheet_type == "corporate" else DIVISION_PAGES
+    fill_pdf(template_path, values, output_path, page_indices=pages)
     return values
+
+
+def generate_division_bundle(
+    *,
+    prior: dict[str, Any],
+    sfxl_docs: list[dict[str, Any]],
+    division_labels: list[str],
+    template_path: Path,
+    output_dir: Path,
+    year: int,
+) -> Path:
+    """
+    One PDF per selected division (pages 3-4).
+    Single division -> that PDF path.
+    Multiple -> a zip of those PDFs.
+    """
+    builder = prior.get("builder_name") or prior.get("builder_key") or "builder"
+    base = safe_filename(builder)
+    pdf_paths: list[Path] = []
+
+    for label in division_labels:
+        out_name = f"GS_{base}_{safe_filename(label)}_{year}_division.pdf"
+        out_path = output_dir / out_name
+        generate_pdf(
+            prior=prior,
+            sfxl_docs=sfxl_docs,
+            template_path=template_path,
+            output_path=out_path,
+            sheet_type="division",
+            division_label=label,
+        )
+        pdf_paths.append(out_path)
+
+    if len(pdf_paths) == 1:
+        return pdf_paths[0]
+
+    zip_path = output_dir / f"GS_{base}_{year}_divisions.zip"
+    with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+        for path in pdf_paths:
+            zf.write(path, arcname=path.name)
+    return zip_path
